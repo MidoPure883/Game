@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>⚡ معركة العصا V1.3 | ساحة القتال</title>
+    <title>⚡ معركة العصا V1.4 | ساحة القتال</title>
     <style>
         * {
             margin: 0;
@@ -22,6 +22,13 @@
             font-family: 'Segoe UI', system-ui, sans-serif;
             touch-action: none;
             padding: 10px;
+            /* دعم الوضع الأفقي */
+            @media (orientation: portrait) {
+                transform: rotate(0deg);
+            }
+            @media (orientation: landscape) {
+                padding: 5px;
+            }
         }
 
         .game-wrapper {
@@ -32,6 +39,10 @@
             width: 100%;
             max-width: 600px;
             position: relative;
+            /* في الوضع الأفقي نزيد العرض */
+            @media (orientation: landscape) {
+                max-width: 800px;
+            }
         }
 
         .version-badge {
@@ -334,29 +345,31 @@
             color: #f1c40f;
         }
 
+        /* تحسين تخطيط الأزرار - استخدام Grid ثابت */
         .controls-area {
-            display: flex;
-            gap: 10px;
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 8px;
             margin-top: 15px;
             padding: 15px;
             background: rgba(0,0,0,0.3);
             border-radius: 40px;
             justify-content: center;
-            flex-wrap: wrap;
         }
 
         .joystick-area {
+            grid-column: span 2;
             background: #1e272e;
             border-radius: 40px;
-            padding: 8px 20px;
+            padding: 8px 10px;
             display: flex;
             align-items: center;
-            gap: 20px;
+            justify-content: space-around;
         }
 
         .joystick {
-            width: 70px;
-            height: 70px;
+            width: 60px;
+            height: 60px;
             background: #2c3e50;
             border-radius: 50%;
             display: flex;
@@ -376,7 +389,7 @@
         }
 
         .joystick span {
-            font-size: 2.5rem;
+            font-size: 2rem;
             color: white;
             text-shadow: 0 5px 0 #1a262f;
             pointer-events: none;
@@ -386,12 +399,12 @@
             background: linear-gradient(145deg, #2c3e50, #1a2632);
             border: none;
             color: white;
-            font-size: 1.8rem;
-            width: 70px;
-            height: 70px;
-            border-radius: 35px;
+            font-size: 1.5rem;
+            width: 100%;
+            height: 60px;
+            border-radius: 30px;
             cursor: pointer;
-            box-shadow: 0 8px 0 #0f1419, 0 8px 20px rgba(0,0,0,0.6);
+            box-shadow: 0 6px 0 #0f1419, 0 8px 20px rgba(0,0,0,0.6);
             transition: all 0.08s linear;
             display: flex;
             align-items: center;
@@ -400,21 +413,18 @@
         }
 
         .control-btn:active {
-            transform: translateY(6px);
+            transform: translateY(4px);
             box-shadow: 0 2px 0 #0f1419;
         }
 
         .attack-btn {
             background: linear-gradient(145deg, #c0392b, #a8231a);
-            width: 90px;
-            box-shadow: 0 8px 0 #6b1e14, 0 8px 25px rgba(192,57,43,0.5);
+            box-shadow: 0 6px 0 #6b1e14, 0 8px 25px rgba(192,57,43,0.5);
             border-color: #e74c3c;
         }
 
         .block-btn {
             background: linear-gradient(145deg, #2c3e50, #1a2632);
-            width: 70px;
-            box-shadow: 0 8px 0 #0f1419, 0 8px 20px rgba(0,0,0,0.6);
             border-color: #3498db;
         }
 
@@ -425,13 +435,11 @@
 
         .jump-btn {
             background: linear-gradient(145deg, #f39c12, #e67e22);
-            width: 70px;
-            box-shadow: 0 8px 0 #b85e0a, 0 8px 20px rgba(0,0,0,0.6);
             border-color: #f1c40f;
         }
 
         .power-meter {
-            width: 100px;
+            width: 80px;
             height: 20px;
             background: #1e272e;
             border-radius: 20px;
@@ -518,11 +526,21 @@
             background: #27ae60;
             border-color: #2ecc71;
         }
+
+        /* للشاشات الصغيرة جداً */
+        @media (max-width: 450px) {
+            .controls-area {
+                grid-template-columns: repeat(3, 1fr);
+            }
+            .joystick-area {
+                grid-column: span 3;
+            }
+        }
     </style>
 </head>
 <body>
     <div class="game-wrapper">
-        <div class="version-badge">⚡ الإصدار 1.3</div>
+        <div class="version-badge">⚡ الإصدار 1.4</div>
 
         <!-- شاشة القائمة الرئيسية -->
         <div class="main-menu" id="mainMenu">
@@ -650,38 +668,62 @@
     </div>
 
     <script>
-        // ========== تهيئة canvas وإدارة الحجم المتجاوب ==========
+        // ========== إعدادات الرسم مع دعم devicePixelRatio ==========
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
         
-        // دالة resize محسنة
         function resizeCanvas() {
             const container = canvas.parentElement;
-            canvas.width = container.clientWidth;
-            canvas.height = container.clientHeight;
+            const dpr = window.devicePixelRatio || 1;
+            const rect = container.getBoundingClientRect();
             
-            // إعادة تعيين مواقع اللاعبين بعد تغيير الحجم إذا كانت اللعبة نشطة
-            if (document.getElementById('gameScreen').style.display === 'block') {
+            // نستخدم getBoundingClientRect لأن clientWidth قد يكون صفرًا عند إخفاء العنصر
+            if (rect.width === 0 || rect.height === 0) return;
+            
+            canvas.width = rect.width * dpr;
+            canvas.height = rect.height * dpr;
+            canvas.style.width = rect.width + 'px';
+            canvas.style.height = rect.height + 'px';
+            
+            // تصحيح مقياس الرسم
+            ctx.setTransform(1, 0, 0, 1, 0, 0); // reset
+            ctx.scale(dpr, dpr);
+            
+            // إعادة تعيين مواقع اللاعبين إذا كانت اللعبة نشطة
+            if (document.getElementById('gameScreen').style.display === 'block' && Game) {
                 Game.player1.y = getGroundY();
                 Game.player2.y = getGroundY();
-                // ضبط الحدود الأفقية
-                Game.player1.x = Math.min(Game.player1.x, canvas.width * 0.4);
-                Game.player2.x = Math.max(Game.player2.x, canvas.width * 0.6);
+                Game.player1.x = Math.min(Game.player1.x, canvas.width / dpr * 0.4);
+                Game.player2.x = Math.max(Game.player2.x, canvas.width / dpr * 0.6);
             }
         }
 
-        // استخدام ResizeObserver لمراقبة تغيير حجم الحاوية بدقة
-        const resizeObserver = new ResizeObserver(() => {
-            resizeCanvas();
-        });
-        resizeObserver.observe(canvas.parentElement);
-
-        // دالة لحساب GROUND_Y ديناميكيًا (ثابتة بالنسبة لارتفاع الكانفاس)
-        function getGroundY() {
-            return canvas.height - 60;
+        // نستخدم ResizeObserver فقط عندما تكون الشاشة ظاهرة
+        let resizeObserver;
+        function observeResize(enable) {
+            if (enable) {
+                if (!resizeObserver) {
+                    resizeObserver = new ResizeObserver(() => {
+                        if (document.getElementById('gameScreen').style.display === 'block') {
+                            resizeCanvas();
+                        }
+                    });
+                }
+                resizeObserver.observe(canvas.parentElement);
+            } else {
+                if (resizeObserver) {
+                    resizeObserver.disconnect();
+                }
+            }
         }
 
-        // ========== نظام الإحصائيات (مع localStorage) ==========
+        // دالة لحساب GROUND_Y ديناميكيًا
+        function getGroundY() {
+            const dpr = window.devicePixelRatio || 1;
+            return (canvas.height / dpr) - 60;
+        }
+
+        // ========== نظام الإحصائيات ==========
         const Stats = {
             wins: parseInt(localStorage.getItem('wins')) || 0,
             losses: parseInt(localStorage.getItem('losses')) || 0,
@@ -723,11 +765,9 @@
             roundTime: 60,
             timeLeft: 60,
             timerInterval: null,
-            lastTimestamp: 0,
-            deltaTime: 16 // 60 FPS تقريباً
+            lastTimestamp: 0
         };
 
-        // ألوان اللاعبين
         const colorMap = {
             red: '#e74c3c',
             blue: '#3498db',
@@ -737,35 +777,44 @@
             black: '#2c3e50'
         };
 
-        // ========== نظام الصوت المحسن ==========
+        // ========== نظام الصوت المحسن (مع Audio Pool) ==========
         const SoundManager = {
             sounds: {},
             enabled: true,
             muted: false,
             volume: 0.5,
-            soundPath: '', // اتركه فارغاً إذا كانت الملفات في نفس المجلد
+            soundPath: '',
+            maxPoolSize: 5,
             
             loadSounds() {
-                const soundFiles = ['punch', 'block', 'hit', 'jump', 'win', 'lose', 'fight'];
-                soundFiles.forEach(name => {
-                    const audio = new Audio(this.soundPath + name + '.mp3');
-                    audio.volume = this.volume;
-                    audio.preload = 'auto';
-                    // منع التأخير عند التشغيل
-                    this.sounds[name] = audio;
+                const soundNames = ['punch', 'block', 'hit', 'jump', 'win', 'lose', 'fight'];
+                soundNames.forEach(name => {
+                    this.sounds[name] = [];
+                    for (let i = 0; i < this.maxPoolSize; i++) {
+                        const audio = new Audio(this.soundPath + name + '.mp3');
+                        audio.volume = this.volume;
+                        audio.preload = 'auto';
+                        this.sounds[name].push(audio);
+                    }
                 });
             },
             
             play(name) {
                 if (this.muted || !this.enabled) return;
-                const sound = this.sounds[name];
-                if (sound) {
-                    // Clone لتشغيل عدة مرات متداخلة
-                    const playPromise = sound.cloneNode().play();
-                    if (playPromise) {
-                        playPromise.catch(() => {}); // تجاهل أخطاء autoplay
+                const pool = this.sounds[name];
+                if (!pool) return;
+                // ابحث عن أول عنصر غير مشغل
+                for (let i = 0; i < pool.length; i++) {
+                    if (pool[i].paused) {
+                        pool[i].currentTime = 0;
+                        pool[i].play().catch(() => {});
+                        return;
                     }
                 }
+                // إذا كان الكل مشغولاً، استخدم أول عنصر
+                pool[0].pause();
+                pool[0].currentTime = 0;
+                pool[0].play().catch(() => {});
             },
             
             toggleMute() {
@@ -789,6 +838,7 @@
             document.getElementById('characterSelect').style.display = 'none';
             document.getElementById('statsScreen').style.display = 'none';
             document.getElementById('gameScreen').style.display = 'none';
+            observeResize(false);
         }
 
         function showCharacterSelect() {
@@ -796,6 +846,7 @@
             document.getElementById('characterSelect').style.display = 'flex';
             document.getElementById('statsScreen').style.display = 'none';
             document.getElementById('gameScreen').style.display = 'none';
+            observeResize(false);
             
             document.querySelectorAll('.color-option').forEach(opt => opt.classList.remove('selected'));
             const colorId = `color${Settings.playerColor.charAt(0).toUpperCase() + Settings.playerColor.slice(1)}`;
@@ -808,6 +859,7 @@
             document.getElementById('characterSelect').style.display = 'none';
             document.getElementById('statsScreen').style.display = 'flex';
             document.getElementById('gameScreen').style.display = 'none';
+            observeResize(false);
             updateStatsDisplay();
         }
 
@@ -826,10 +878,11 @@
         }
 
         function setDifficulty(event, level) {
-            Settings.difficulty = level;
+            // استخدم event.currentTarget بدلاً من event.target لضمان الحصول على الزر نفسه
             document.querySelectorAll('.diff-btn').forEach(btn => btn.classList.remove('selected'));
-            event.target.classList.add('selected');
+            event.currentTarget.classList.add('selected');
             
+            Settings.difficulty = level;
             if (level === 'easy') {
                 PHYSICS.AI_SPEED_MULTIPLIER = 0.7;
                 PHYSICS.AI_DAMAGE_MULTIPLIER = 0.8;
@@ -842,14 +895,15 @@
             }
         }
 
-        // Ready/Fight timeouts
         let readyTimeout = null;
 
         function startNewGame() {
             document.getElementById('mainMenu').style.display = 'none';
             document.getElementById('gameScreen').style.display = 'block';
             
-            // تأكد من أن حجم canvas صحيح بعد إظهار الشاشة
+            // تفعيل مراقبة التغيير
+            observeResize(true);
+            // تأكد من الحجم الصحيح
             resizeCanvas();
             
             if (readyTimeout) clearTimeout(readyTimeout);
@@ -859,11 +913,11 @@
             
             readyScreen.classList.add('show');
             readyText.textContent = 'READY?';
-            SoundManager.play('fight');
             
+            // لا تشغل الصوت هنا
             readyTimeout = setTimeout(() => {
                 readyText.textContent = 'FIGHT!';
-                SoundManager.play('fight');
+                SoundManager.play('fight'); // تشغيل الصوت فقط عند FIGHT
                 
                 readyTimeout = setTimeout(() => {
                     readyScreen.classList.remove('show');
@@ -874,11 +928,11 @@
         }
 
         function startRound() {
-            // إعادة تعيين حالة اللعبة
+            const dpr = window.devicePixelRatio || 1;
             Game.player1.health = 100;
             Game.player2.health = 100;
-            Game.player1.x = canvas.width * 0.2;
-            Game.player2.x = canvas.width * 0.8;
+            Game.player1.x = (canvas.width / dpr) * 0.2;
+            Game.player2.x = (canvas.width / dpr) * 0.8;
             Game.player1.y = getGroundY();
             Game.player2.y = getGroundY();
             Game.player1.combo = 0;
@@ -896,31 +950,32 @@
             document.getElementById('gameMessage').textContent = '⚡ قاتل!';
         }
 
-        // ========== الفيزياء (مع دعم delta time) ==========
+        // ========== الفيزياء (بدون ضرب *16 لأننا نستخدم dt) ==========
         const PHYSICS = {
-            GRAVITY: 0.5 * 16,   // لكل 16ms (60fps)
-            FRICTION: 0.92,
-            MOVE_SPEED: 0.22 * 16,
-            JUMP_FORCE: -0.7 * 16,
+            GRAVITY: 0.5,
+            FRICTION: 0.98,
+            MOVE_SPEED: 0.22,
+            JUMP_FORCE: -8,
             ATTACK_RANGE: 55,
             ATTACK_DURATION: 12,
             STUN_DURATION: 15,
-            KNOCKBACK: 0.8 * 16,
+            KNOCKBACK: 8,
             COMBO_WINDOW: 40,
             POWER_MAX: 100,
-            POWER_CHARGE_RATE: 0.15 * 16,
+            POWER_CHARGE_RATE: 0.15,
             DAMAGE_BASE: 12,
             AI_AGGRESSION: 0.04,
             BLOCK_REDUCTION: 0.4,
             BLOCK_STAMINA: 50,
-            BLOCK_RECHARGE: 0.06 * 16,
+            BLOCK_RECHARGE: 0.06,
             AI_SPEED_MULTIPLIER: 1.0,
-            AI_DAMAGE_MULTIPLIER: 1.0
+            AI_DAMAGE_MULTIPLIER: 1.0,
+            ATTACK_COOLDOWN: 35  // ثابت لـ AI
         };
 
         const Game = {
             player1: {
-                x: canvas.width * 0.2, y: getGroundY(),
+                x: 0, y: 0,
                 vx: 0, vy: 0,
                 health: 100,
                 facing: 1,
@@ -938,7 +993,7 @@
             },
             
             player2: {
-                x: canvas.width * 0.8, y: getGroundY(),
+                x: 0, y: 0,
                 vx: 0, vy: 0,
                 health: 100,
                 facing: -1,
@@ -1007,7 +1062,7 @@
             }
         }
 
-        // ========== دالة الضرب (مع تحسين الجسيمات) ==========
+        // ========== دالة الضرب (مع حد أقصى للتأثيرات) ==========
         function applyHit(attacker, defender, damage, knockback) {
             if (defender.invincible || defender.stunTimer > 0 || !Game.gameActive) return false;
             
@@ -1026,7 +1081,7 @@
                 if (defender.blockStamina <= 0) defender.isBlocking = false;
                 
                 SoundManager.play('block');
-                Game.effects.push({ x: defender.x, y: defender.y - 40, text: "🛡️", timer: 15, type: 'block' });
+                addEffect({ x: defender.x, y: defender.y - 40, text: "🛡️", timer: 15, type: 'block' });
             } else {
                 defender.stunTimer = PHYSICS.STUN_DURATION;
                 SoundManager.play('hit');
@@ -1034,7 +1089,6 @@
             
             defender.health = Math.max(0, defender.health - finalDamage);
             
-            // Knockback يعتمد على delta time (تم تضمينه بالفعل)
             const direction = attacker.facing;
             defender.vx += direction * knockback;
             defender.vy = wasBlocked ? -2 : -4;
@@ -1043,14 +1097,17 @@
             defender.invincibleTimer = 25;
             
             if (!wasBlocked) {
-                Game.effects.push({ x: defender.x, y: defender.y - 40, text: `-${Math.floor(finalDamage)}`, timer: 20, type: 'damage' });
+                addEffect({ x: defender.x, y: defender.y - 40, text: `-${Math.floor(finalDamage)}`, timer: 20, type: 'damage' });
             }
             
-            // تقليل عدد الجسيمات للأجهزة الضعيفة - نتحقق من طول التأثيرات
-            const particleCount = Game.effects.length > 100 ? 2 : (wasBlocked ? 4 : 6);
+            // تقليل عدد الجسيمات ديناميكيًا
+            let particleCount = wasBlocked ? 4 : 6;
+            if (Game.effects.length > 150) particleCount = 2;
+            else if (Game.effects.length > 100) particleCount = 4;
+            
             const particleColor = wasBlocked ? '#3498db' : '#e74c3c';
             for (let i = 0; i < particleCount; i++) {
-                Game.effects.push({ 
+                addEffect({ 
                     x: defender.x, y: defender.y - 30, 
                     vx: (Math.random() - 0.5) * 5, 
                     vy: Math.random() * -4, 
@@ -1077,14 +1134,21 @@
             return true;
         }
 
-        // ========== تحديث AI (مختصر لكن كامل) ==========
+        // دالة مساعدة لإضافة تأثيرات مع حد أقصى
+        function addEffect(effect) {
+            if (Game.effects.length > 300) {
+                Game.effects.shift(); // إزالة الأقدم
+            }
+            Game.effects.push(effect);
+        }
+
+        // ========== تحديث AI (مع cooldown ثابت) ==========
         function updateAI(dt) {
             const p2 = Game.player2;
             const p1 = Game.player1;
             
             if (!Game.gameActive) return;
             
-            // شحن طاقة التصدي
             if (p2.blockStamina < PHYSICS.BLOCK_STAMINA && !p2.isBlocking) {
                 p2.blockStamina = Math.min(PHYSICS.BLOCK_STAMINA, p2.blockStamina + PHYSICS.BLOCK_RECHARGE * dt);
             }
@@ -1149,7 +1213,6 @@
             
             p2.facing = dx > 0 ? 1 : -1;
             
-            // القفز الذكي
             if (p2.jumpTimer <= 0 && p2.isGrounded) {
                 if ((p1.vy < -5 && distance < 100) || Math.random() < 0.02) {
                     p2.vy = PHYSICS.JUMP_FORCE;
@@ -1160,7 +1223,7 @@
                 p2.jumpTimer -= dt;
             }
             
-            // الهجوم
+            // هجوم AI مع cooldown ثابت (بالثواني)
             if (p2.attackCooldown <= 0 && distance < PHYSICS.ATTACK_RANGE * 1.8 && !p2.isBlocking) {
                 let shouldAttack = false;
                 
@@ -1172,7 +1235,7 @@
                 if (shouldAttack) {
                     p2.isAttacking = true;
                     p2.attackTimer = PHYSICS.ATTACK_DURATION;
-                    p2.attackCooldown = p2.behavior === 'desperate' ? 20 : 35;
+                    p2.attackCooldown = PHYSICS.ATTACK_COOLDOWN; // ثابت
                     
                     SoundManager.play('punch');
                     
@@ -1190,7 +1253,7 @@
             else p2.isAttacking = false;
         }
 
-        // ========== تحديث اللعبة الرئيسي (مع delta time) ==========
+        // ========== تحديث اللعبة الرئيسي ==========
         function updateGame(dt) {
             if (!Game.gameActive) return;
             
@@ -1199,12 +1262,10 @@
             
             Game.frame++;
             
-            // شحن طاقة التصدي
             if (p1.blockStamina < PHYSICS.BLOCK_STAMINA && !p1.isBlocking) {
                 p1.blockStamina = Math.min(PHYSICS.BLOCK_STAMINA, p1.blockStamina + PHYSICS.BLOCK_RECHARGE * dt);
             }
             
-            // مؤقتات المناعة
             if (p1.invincibleTimer > 0) {
                 p1.invincibleTimer -= dt;
                 if (p1.invincibleTimer <= 0) {
@@ -1213,7 +1274,6 @@
                 }
             }
             
-            // حركة اللاعب
             if (p1.stunTimer <= 0) {
                 p1.vx = 0;
                 if (Game.leftPressed && !p1.isBlocking) {
@@ -1235,7 +1295,6 @@
                 p1.stunTimer -= dt;
             }
             
-            // فيزياء اللاعب
             p1.x += p1.vx;
             p1.y += p1.vy;
             p1.vy += PHYSICS.GRAVITY * dt;
@@ -1250,9 +1309,10 @@
                 p1.isGrounded = false;
             }
             
-            p1.x = Math.max(50, Math.min(canvas.width - 50, p1.x));
+            const dpr = window.devicePixelRatio || 1;
+            const maxX = (canvas.width / dpr) - 50;
+            p1.x = Math.max(50, Math.min(maxX, p1.x));
             
-            // منع الاختراق
             if (p1.x > p2.x - 40) {
                 p1.x = p2.x - 40;
             }
@@ -1260,7 +1320,6 @@
                 p2.x = p1.x + 40;
             }
             
-            // هجوم اللاعب
             if (p1.isAttacking) {
                 p1.attackTimer -= dt;
                 
@@ -1289,17 +1348,15 @@
                 }
             }
             
-            // تحديث AI
             updateAI(dt);
             
-            // شحن القوة
             if (Game.mouseDown) {
                 Game.powerCharge = Math.min(PHYSICS.POWER_MAX, Game.powerCharge + PHYSICS.POWER_CHARGE_RATE * dt);
             } else {
                 Game.powerCharge = Math.max(0, Game.powerCharge - 0.5 * dt);
             }
             
-            // تحديث التأثيرات
+            // تحديث التأثيرات (مع إزالة المنتهية)
             Game.effects = Game.effects.filter(e => {
                 if (e.type === 'particle') {
                     e.x += (e.vx || 0) * dt;
@@ -1309,7 +1366,6 @@
                 return e.timer > 0;
             });
             
-            // تحديث واجهة المستخدم
             document.getElementById('player1Health').style.width = p1.health + '%';
             document.getElementById('player2Health').style.width = p2.health + '%';
             document.getElementById('powerMeter').style.width = Game.powerCharge + '%';
@@ -1325,7 +1381,7 @@
             }
         }
 
-        // ========== دوال الرسم (بدون تغيير كبير) ==========
+        // ========== دوال الرسم ==========
         function drawStickFigure(x, y, isPlayer, state) {
             const color = isPlayer ? colorMap[Settings.playerColor] : colorMap[Settings.aiColor];
             const headSize = 12;
@@ -1427,11 +1483,11 @@
         }
 
         function drawGame() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.clearRect(0, 0, canvas.width / (window.devicePixelRatio || 1), canvas.height / (window.devicePixelRatio || 1));
             
             const groundY = getGroundY();
             ctx.fillStyle = '#2a3440';
-            ctx.fillRect(0, groundY, canvas.width, 40);
+            ctx.fillRect(0, groundY, canvas.width / (window.devicePixelRatio || 1), 40);
             
             drawStickFigure(Game.player1.x, Game.player1.y, true, Game.player1);
             drawStickFigure(Game.player2.x, Game.player2.y, false, Game.player2);
@@ -1457,7 +1513,7 @@
             requestAnimationFrame(gameLoop);
         }
 
-        // ========== أحداث التحكم (بدون تغيير) ==========
+        // ========== أحداث التحكم ==========
         function setupControls() {
             const leftBtn = document.getElementById('joystickLeft');
             const rightBtn = document.getElementById('joystickRight');
