@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>⚡ معركة العصا V1.5 | ساحة القتال</title>
+    <title>⚡ معركة العصا V1.6 | ساحة القتال</title>
     <style>
-        /* نفس التنسيقات السابقة مع إضافة تحسينات طفيفة */
+        /* نفس التنسيقات السابقة (تم حذفها للاختصار، لكن يجب تضمينها كاملة) */
         * {
             margin: 0;
             padding: 0;
@@ -530,7 +530,7 @@
 </head>
 <body>
     <div class="game-wrapper">
-        <div class="version-badge">⚡ الإصدار 1.5</div>
+        <div class="version-badge">⚡ الإصدار 1.6</div>
 
         <!-- شاشة القائمة الرئيسية -->
         <div class="main-menu" id="mainMenu">
@@ -940,7 +940,7 @@
             ATTACK_DURATION: 12,
             STUN_DURATION: 15,
             KNOCKBACK: 8,
-            COMBO_WINDOW: 40,
+            COMBO_WINDOW_MS: 400,      // 400 ميلي ثانية
             POWER_MAX: 100,
             POWER_CHARGE_RATE: 0.15,
             DAMAGE_BASE: 12,
@@ -965,7 +965,7 @@
                 attackPower: 0,
                 stunTimer: 0,
                 combo: 0,
-                lastHitTime: 0,
+                lastHitTime: 0,           // سيتم تخزين performance.now()
                 invincible: false,
                 invincibleTimer: 0,
                 isBlocking: false,
@@ -1044,14 +1044,9 @@
 
         // ========== دالة الضرب (محسنة) ==========
         function applyHit(attacker, defender, damage, knockback) {
-            // منع الضرب إذا كان المدافع في حالة مناعة أو مذهول أو اللعبة غير نشطة
             if (defender.invincible || defender.stunTimer > 0 || !Game.gameActive) {
-                console.log('Hit blocked: invincible or stunned');
                 return false;
             }
-            
-            // التأكد من أن المهاجم يواجه المدافع (optional, يمكن إضافته)
-            // if (attacker.facing * (defender.x - attacker.x) <= 0) return false;
             
             if (attacker === Game.player2) {
                 damage *= PHYSICS.AI_DAMAGE_MULTIPLIER;
@@ -1103,7 +1098,16 @@
                 });
             }
             
-            console.log(`Hit applied: damage=${finalDamage}, defender health now ${defender.health}`);
+            // نظام الكومبو بالوقت الحقيقي
+            if (attacker === Game.player1) {
+                const now = performance.now();
+                if (now - Game.player1.lastHitTime < PHYSICS.COMBO_WINDOW_MS) {
+                    Game.player1.combo++;
+                } else {
+                    Game.player1.combo = 1;
+                }
+                Game.player1.lastHitTime = now;
+            }
             
             if (defender.health <= 0 && Game.gameActive) {
                 Game.gameActive = false;
@@ -1310,31 +1314,22 @@
             if (p1.isAttacking) {
                 p1.attackTimer -= dt;
                 
-                // لحظة الضرب: عندما ينخفض المؤقت عبر العتبة
                 if (p1.attackTimer <= PHYSICS.ATTACK_DURATION - 5 && p1.attackTimer > PHYSICS.ATTACK_DURATION - 6) {
                     const distance = Math.abs(p1.x - p2.x);
-                    console.log(`Attack check: distance=${distance}, range=${PHYSICS.ATTACK_RANGE}, facing=${p1.facing}, enemy facing=${p2.facing}`);
                     if (distance < PHYSICS.ATTACK_RANGE) {
                         const damage = PHYSICS.DAMAGE_BASE + (Game.powerCharge * 0.25);
-                        console.log(`Applying hit with damage=${damage}`);
-                        if (applyHit(p1, p2, damage, PHYSICS.KNOCKBACK)) {
-                            if (Game.frame - p1.lastHitTime < PHYSICS.COMBO_WINDOW) {
-                                p1.combo++;
-                            } else {
-                                p1.combo = 1;
-                            }
-                            p1.lastHitTime = Game.frame;
-                        }
+                        applyHit(p1, p2, damage, PHYSICS.KNOCKBACK);
                     }
                 }
                 
                 if (p1.attackTimer <= 0) {
                     p1.isAttacking = false;
                 }
-            } else {
-                if (p1.combo > 0 && Game.frame - p1.lastHitTime > PHYSICS.COMBO_WINDOW) {
-                    p1.combo = 0;
-                }
+            }
+            
+            // إعادة تعيين الكومبو إذا مر وقت طويل دون ضربة
+            if (p1.combo > 0 && performance.now() - p1.lastHitTime > PHYSICS.COMBO_WINDOW_MS) {
+                p1.combo = 0;
             }
             
             updateAI(dt);
@@ -1581,4 +1576,4 @@
         requestAnimationFrame(gameLoop);
     </script>
 </body>
-</html>
+    </html>
