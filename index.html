@@ -279,7 +279,7 @@
             font-size: 14px;
         }
 
-        .sound-btn.active {
+        .sound-btn:active {
             background: #27ae60;
         }
     </style>
@@ -363,83 +363,93 @@
         resizeCanvas();
         window.addEventListener('resize', resizeCanvas);
         
-        // ========== نظام الصوت الخارجي ==========
-const SoundManager = {
-    sounds: {},
-    enabled: true,
-    muted: false,
-    volume: 0.5,
-    
-    // تحميل كل الأصوات
-    loadSounds() {
-        // قائمة الأصوات مع مساراتها
-        const soundFiles = {
-            punch: 'sounds/punch.mp3',
-            block: 'sounds/block.mp3',
-            hit: 'sounds/hit.mp3',
-            jump: 'sounds/jump.mp3'
+        // ========== نظام الصوت الخارجي (بدون مجلد sounds) ==========
+        const SoundManager = {
+            sounds: {},
+            enabled: true,
+            muted: false,
+            volume: 0.5,
+            
+            // تحميل كل الأصوات من نفس المجلد
+            loadSounds() {
+                console.log('🔊 بدء تحميل الأصوات...');
+                
+                // ❗ مهم جداً: الملفات في نفس المجلد (مش في مجلد sounds)
+                const soundFiles = {
+                    punch: 'punch.mp3',
+                    block: 'block.mp3',
+                    hit: 'hit.mp3',
+                    jump: 'jump.mp3'
+                };
+                
+                for (let [name, path] of Object.entries(soundFiles)) {
+                    console.log(`محاولة تحميل: ${name} من ${path}`);
+                    
+                    this.sounds[name] = new Audio(path);
+                    this.sounds[name].volume = this.volume;
+                    
+                    this.sounds[name].onerror = () => {
+                        console.log(`❌ خطأ في تحميل الصوت: ${name} - تأكد من وجود الملف`);
+                    };
+                    
+                    this.sounds[name].oncanplaythrough = () => {
+                        console.log(`✅ تم تحميل الصوت بنجاح: ${name}`);
+                    };
+                }
+            },
+            
+            // تشغيل صوت
+            play(name) {
+                if (this.muted || !this.enabled) return;
+                
+                const sound = this.sounds[name];
+                if (sound) {
+                    sound.currentTime = 0;
+                    sound.play().catch(e => {
+                        console.log('مشكلة في تشغيل الصوت:', e);
+                    });
+                } else {
+                    console.log(`الصوت ${name} غير موجود`);
+                }
+            },
+            
+            // كتم الصوت
+            toggleMute() {
+                this.muted = !this.muted;
+                const btn = document.getElementById('muteBtn');
+                btn.innerHTML = this.muted ? '🔇 كتم الصوت' : '🔊 تشغيل الصوت';
+                return this.muted;
+            },
+            
+            // اختبار الأصوات
+            testAll() {
+                this.play('punch');
+                setTimeout(() => this.play('block'), 300);
+                setTimeout(() => this.play('hit'), 600);
+                setTimeout(() => this.play('jump'), 900);
+            }
         };
+
+        // تحميل الأصوات
+        SoundManager.loadSounds();
+
+        // أزرار التحكم بالصوت
+        document.getElementById('muteBtn').addEventListener('click', () => {
+            SoundManager.toggleMute();
+        });
         
-        // تحميل كل صوت
-        for (let [name, path] of Object.entries(soundFiles)) {
-            this.sounds[name] = new Audio(path);
-            this.sounds[name].volume = this.volume;
-            
-            // للتصحيح (إظهار أخطاء التحميل)
-            this.sounds[name].onerror = () => {
-                console.log(`خطأ في تحميل الصوت: ${name} - تأكد من وجود الملف في مجلد sounds/`);
-            };
-            
-            // للتصحيح (تأكيد التحميل)
-            this.sounds[name].oncanplaythrough = () => {
-                console.log(`✅ تم تحميل الصوت: ${name}`);
-            };
+        document.getElementById('testSoundBtn').addEventListener('click', () => {
+            SoundManager.testAll();
+        });
+
+        // تفعيل الصوت عند أول تفاعل مع المستخدم
+        function enableAudio() {
+            SoundManager.enabled = true;
+            document.removeEventListener('click', enableAudio);
+            document.removeEventListener('touchstart', enableAudio);
         }
-    },
-    
-    // تشغيل صوت
-    play(name) {
-        if (this.muted || !this.enabled) return;
-        
-        const sound = this.sounds[name];
-        if (sound) {
-            sound.currentTime = 0;
-            sound.play().catch(e => {
-                console.log('مشكلة في تشغيل الصوت:', e);
-            });
-        } else {
-            console.log(`الصوت ${name} غير موجود`);
-        }
-    },
-    
-    // كتم الصوت
-    toggleMute() {
-        this.muted = !this.muted;
-        const btn = document.getElementById('muteBtn');
-        btn.innerHTML = this.muted ? '🔇 كتم الصوت' : '🔊 تشغيل الصوت';
-        return this.muted;
-    },
-    
-    // اختبار الأصوات
-    testAll() {
-        this.play('punch');
-        setTimeout(() => this.play('block'), 300);
-        setTimeout(() => this.play('hit'), 600);
-        setTimeout(() => this.play('jump'), 900);
-    }
-};
-
-// تحميل الأصوات
-SoundManager.loadSounds();
-
-// أزرار التحكم بالصوت
-document.getElementById('muteBtn').addEventListener('click', () => {
-    SoundManager.toggleMute();
-});
-
-document.getElementById('testSoundBtn').addEventListener('click', () => {
-    SoundManager.testAll();
-});
+        document.addEventListener('click', enableAudio);
+        document.addEventListener('touchstart', enableAudio);
 
         // ثوابت اللعبة
         const PHYSICS = {
