@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>⚡ معركة العصا V1.2 | ساحة القتال</title>
     <style>
-        /* (نفس التنسيقات السابقة مع إضافة تعديلات بسيطة) */
+        /* (نفس التنسيقات السابقة) */
         * {
             margin: 0;
             padding: 0;
@@ -619,9 +619,9 @@
             </div>
 
             <div class="difficulty-select">
-                <button class="diff-btn" onclick="setDifficulty('easy')">🌟 سهل</button>
-                <button class="diff-btn selected" id="diffNormal" onclick="setDifficulty('normal')">⚡ متوسط</button>
-                <button class="diff-btn" onclick="setDifficulty('hard')">🔥 صعب</button>
+                <button class="diff-btn" onclick="setDifficulty(event, 'easy')">🌟 سهل</button>
+                <button class="diff-btn selected" id="diffNormal" onclick="setDifficulty(event, 'normal')">⚡ متوسط</button>
+                <button class="diff-btn" onclick="setDifficulty(event, 'hard')">🔥 صعب</button>
             </div>
 
             <div class="combo-counter" id="comboDisplay">
@@ -679,6 +679,11 @@
         }
         resizeCanvas();
         window.addEventListener('resize', resizeCanvas);
+        
+        // دالة لحساب GROUND_Y ديناميكيًا بناءً على ارتفاع الكانفاس الحالي
+        function getGroundY() {
+            return canvas.height - 60;
+        }
         
         // ========== نظام الإحصائيات ==========
         const Stats = {
@@ -740,6 +745,8 @@
             enabled: true,
             muted: false,
             volume: 0.5,
+            // يمكن تغيير المسار إذا كانت الملفات في مجلد sounds
+            soundPath: '', // مثلاً 'sounds/' إذا كانت في مجلد
             
             loadSounds() {
                 const soundFiles = {
@@ -753,8 +760,14 @@
                 };
                 
                 for (let [name, path] of Object.entries(soundFiles)) {
-                    this.sounds[name] = new Audio(path);
+                    const fullPath = this.soundPath + path;
+                    this.sounds[name] = new Audio(fullPath);
                     this.sounds[name].volume = this.volume;
+                    
+                    // إضافة مستمع للخطأ لتشخيص مشاكل التحميل
+                    this.sounds[name].onerror = () => {
+                        console.warn(`تعذر تحميل الصوت: ${fullPath}`);
+                    };
                 }
             },
             
@@ -762,8 +775,12 @@
                 if (this.muted || !this.enabled) return;
                 const sound = this.sounds[name];
                 if (sound) {
+                    // إعادة تشغيل الصوت إذا كان يعمل بالفعل
+                    sound.pause();
                     sound.currentTime = 0;
-                    sound.play().catch(e => {});
+                    sound.play().catch(e => {
+                        // تجاهل أخطاء التشغيل بسبب تفاعل المستخدم
+                    });
                 }
             },
             
@@ -827,7 +844,8 @@
             document.getElementById(`color${color.charAt(0).toUpperCase() + color.slice(1)}`).classList.add('selected');
         }
 
-        function setDifficulty(level) {
+        // دالة تغيير الصعوبة - تم تعديلها لاستقبال الحدث ومستوى الصعوبة
+        function setDifficulty(event, level) {
             Settings.difficulty = level;
             document.querySelectorAll('.diff-btn').forEach(btn => btn.classList.remove('selected'));
             event.target.classList.add('selected');
@@ -845,10 +863,16 @@
             }
         }
 
+        // متغير لتخزين timeout شاشة READY/Fight
+        let readyTimeout = null;
+
         // ========== بدء لعبة جديدة ==========
         function startNewGame() {
             document.getElementById('mainMenu').style.display = 'none';
             document.getElementById('gameScreen').style.display = 'block';
+            
+            // إلغاء أي timeout سابق
+            if (readyTimeout) clearTimeout(readyTimeout);
             
             // إظهار شاشة READY FIGHT
             const readyScreen = document.getElementById('readyScreen');
@@ -857,18 +881,20 @@
             readyScreen.classList.add('show');
             readyText.textContent = 'READY?';
             
-            // تشغيل صوت fight
+            // تشغيل صوت fight (مرة واحدة فقط عند READY?)
             SoundManager.play('fight');
             
-            setTimeout(() => {
+            readyTimeout = setTimeout(() => {
                 readyText.textContent = 'FIGHT!';
-                SoundManager.play('fight'); // نفس الصوت مرة ثانية
+                // لا نريد تشغيل صوت إضافي هنا؟ يمكن إضافته إذا أردت
+                // SoundManager.play('fight');
+                
+                readyTimeout = setTimeout(() => {
+                    readyScreen.classList.remove('show');
+                    startRound();
+                    readyTimeout = null;
+                }, 1000);
             }, 1000);
-            
-            setTimeout(() => {
-                readyScreen.classList.remove('show');
-                startRound();
-            }, 2000);
         }
 
         function startRound() {
@@ -896,7 +922,7 @@
         const PHYSICS = {
             GRAVITY: 0.5,
             FRICTION: 0.9,
-            GROUND_Y: canvas.height - 60,
+            // GROUND_Y أصبحت دالة تُحسب عند الحاجة
             MOVE_SPEED: 3.5,
             JUMP_FORCE: -10,
             ATTACK_RANGE: 55,
@@ -917,7 +943,8 @@
 
         const Game = {
             player1: {
-                x: canvas.width * 0.2, y: PHYSICS.GROUND_Y,
+                x: canvas.width * 0.2, 
+                y: getGroundY(), // استخدام الدالة
                 vx: 0, vy: 0,
                 health: 100,
                 facing: 1,
@@ -935,7 +962,8 @@
             },
             
             player2: {
-                x: canvas.width * 0.8, y: PHYSICS.GROUND_Y,
+                x: canvas.width * 0.8, 
+                y: getGroundY(),
                 vx: 0, vy: 0,
                 health: 100,
                 facing: -1,
@@ -1181,8 +1209,9 @@
             p2.vy += PHYSICS.GRAVITY;
             p2.vx *= PHYSICS.FRICTION;
             
-            if (p2.y >= PHYSICS.GROUND_Y) {
-                p2.y = PHYSICS.GROUND_Y;
+            const groundY = getGroundY();
+            if (p2.y >= groundY) {
+                p2.y = groundY;
                 p2.vy = 0;
                 p2.isGrounded = true;
             } else {
@@ -1236,8 +1265,9 @@
             p1.vy += PHYSICS.GRAVITY;
             p1.vx *= PHYSICS.FRICTION;
             
-            if (p1.y >= PHYSICS.GROUND_Y) {
-                p1.y = PHYSICS.GROUND_Y;
+            const groundY = getGroundY();
+            if (p1.y >= groundY) {
+                p1.y = groundY;
                 p1.vy = 0;
                 p1.isGrounded = true;
             } else {
@@ -1417,8 +1447,9 @@
         function drawGame() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             
+            const groundY = getGroundY();
             ctx.fillStyle = '#2a3440';
-            ctx.fillRect(0, PHYSICS.GROUND_Y, canvas.width, 40);
+            ctx.fillRect(0, groundY, canvas.width, 40);
             
             drawStickFigure(Game.player1.x, Game.player1.y, true, Game.player1);
             drawStickFigure(Game.player2.x, Game.player2.y, false, Game.player2);
@@ -1493,6 +1524,7 @@
         // ========== العودة للقائمة ==========
         document.getElementById('restartBtn').addEventListener('click', () => {
             clearInterval(Settings.timerInterval);
+            if (readyTimeout) clearTimeout(readyTimeout);
             showMainMenu();
         });
 
@@ -1511,4 +1543,4 @@
         gameLoop();
     </script>
 </body>
-</html>
+                </html>
