@@ -3,9 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>⚡ معركة العصا V1.2 | ساحة القتال</title>
+    <title>⚡ معركة العصا V1.3 | ساحة القتال</title>
     <style>
-        /* (نفس التنسيقات السابقة) */
         * {
             margin: 0;
             padding: 0;
@@ -227,29 +226,11 @@
             animation: pulse 0.5s infinite alternate;
         }
 
-        .fight-text {
-            font-size: 6rem;
-            font-weight: 900;
-            background: linear-gradient(135deg, #e74c3c, #f1c40f);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            animation: shake 0.3s infinite;
-        }
-
         @keyframes pulse {
             from { transform: scale(1); }
             to { transform: scale(1.1); }
         }
 
-        @keyframes shake {
-            0% { transform: translate(0,0); }
-            25% { transform: translate(-5px,5px); }
-            50% { transform: translate(5px,-5px); }
-            75% { transform: translate(-5px,-5px); }
-            100% { transform: translate(0,0); }
-        }
-
-        /* باقي تنسيقات اللعبة */
         .arena {
             position: relative;
             width: 100%;
@@ -541,7 +522,7 @@
 </head>
 <body>
     <div class="game-wrapper">
-        <div class="version-badge">⚡ الإصدار 1.2</div>
+        <div class="version-badge">⚡ الإصدار 1.3</div>
 
         <!-- شاشة القائمة الرئيسية -->
         <div class="main-menu" id="mainMenu">
@@ -669,23 +650,38 @@
     </div>
 
     <script>
-        // ========== إعدادات الرسم ==========
+        // ========== تهيئة canvas وإدارة الحجم المتجاوب ==========
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
         
+        // دالة resize محسنة
         function resizeCanvas() {
-            canvas.width = canvas.parentElement.clientWidth;
-            canvas.height = canvas.parentElement.clientHeight;
+            const container = canvas.parentElement;
+            canvas.width = container.clientWidth;
+            canvas.height = container.clientHeight;
+            
+            // إعادة تعيين مواقع اللاعبين بعد تغيير الحجم إذا كانت اللعبة نشطة
+            if (document.getElementById('gameScreen').style.display === 'block') {
+                Game.player1.y = getGroundY();
+                Game.player2.y = getGroundY();
+                // ضبط الحدود الأفقية
+                Game.player1.x = Math.min(Game.player1.x, canvas.width * 0.4);
+                Game.player2.x = Math.max(Game.player2.x, canvas.width * 0.6);
+            }
         }
-        resizeCanvas();
-        window.addEventListener('resize', resizeCanvas);
-        
-        // دالة لحساب GROUND_Y ديناميكيًا بناءً على ارتفاع الكانفاس الحالي
+
+        // استخدام ResizeObserver لمراقبة تغيير حجم الحاوية بدقة
+        const resizeObserver = new ResizeObserver(() => {
+            resizeCanvas();
+        });
+        resizeObserver.observe(canvas.parentElement);
+
+        // دالة لحساب GROUND_Y ديناميكيًا (ثابتة بالنسبة لارتفاع الكانفاس)
         function getGroundY() {
             return canvas.height - 60;
         }
-        
-        // ========== نظام الإحصائيات ==========
+
+        // ========== نظام الإحصائيات (مع localStorage) ==========
         const Stats = {
             wins: parseInt(localStorage.getItem('wins')) || 0,
             losses: parseInt(localStorage.getItem('losses')) || 0,
@@ -726,7 +722,9 @@
             difficulty: 'normal',
             roundTime: 60,
             timeLeft: 60,
-            timerInterval: null
+            timerInterval: null,
+            lastTimestamp: 0,
+            deltaTime: 16 // 60 FPS تقريباً
         };
 
         // ألوان اللاعبين
@@ -739,55 +737,40 @@
             black: '#2c3e50'
         };
 
-        // ========== نظام الصوت ==========
+        // ========== نظام الصوت المحسن ==========
         const SoundManager = {
             sounds: {},
             enabled: true,
             muted: false,
             volume: 0.5,
-            // يمكن تغيير المسار إذا كانت الملفات في مجلد sounds
-            soundPath: '', // مثلاً 'sounds/' إذا كانت في مجلد
+            soundPath: '', // اتركه فارغاً إذا كانت الملفات في نفس المجلد
             
             loadSounds() {
-                const soundFiles = {
-                    punch: 'punch.mp3',
-                    block: 'block.mp3',
-                    hit: 'hit.mp3',
-                    jump: 'jump.mp3',
-                    win: 'win.mp3',
-                    lose: 'lose.mp3',
-                    fight: 'fight.mp3'
-                };
-                
-                for (let [name, path] of Object.entries(soundFiles)) {
-                    const fullPath = this.soundPath + path;
-                    this.sounds[name] = new Audio(fullPath);
-                    this.sounds[name].volume = this.volume;
-                    
-                    // إضافة مستمع للخطأ لتشخيص مشاكل التحميل
-                    this.sounds[name].onerror = () => {
-                        console.warn(`تعذر تحميل الصوت: ${fullPath}`);
-                    };
-                }
+                const soundFiles = ['punch', 'block', 'hit', 'jump', 'win', 'lose', 'fight'];
+                soundFiles.forEach(name => {
+                    const audio = new Audio(this.soundPath + name + '.mp3');
+                    audio.volume = this.volume;
+                    audio.preload = 'auto';
+                    // منع التأخير عند التشغيل
+                    this.sounds[name] = audio;
+                });
             },
             
             play(name) {
                 if (this.muted || !this.enabled) return;
                 const sound = this.sounds[name];
                 if (sound) {
-                    // إعادة تشغيل الصوت إذا كان يعمل بالفعل
-                    sound.pause();
-                    sound.currentTime = 0;
-                    sound.play().catch(e => {
-                        // تجاهل أخطاء التشغيل بسبب تفاعل المستخدم
-                    });
+                    // Clone لتشغيل عدة مرات متداخلة
+                    const playPromise = sound.cloneNode().play();
+                    if (playPromise) {
+                        playPromise.catch(() => {}); // تجاهل أخطاء autoplay
+                    }
                 }
             },
             
             toggleMute() {
                 this.muted = !this.muted;
-                const btn = document.getElementById('muteBtn');
-                btn.innerHTML = this.muted ? '🔇 كتم الصوت' : '🔊 تشغيل الصوت';
+                document.getElementById('muteBtn').innerHTML = this.muted ? '🔇 كتم الصوت' : '🔊 تشغيل الصوت';
             },
             
             testAll() {
@@ -814,7 +797,6 @@
             document.getElementById('statsScreen').style.display = 'none';
             document.getElementById('gameScreen').style.display = 'none';
             
-            // إظهار اللون المختار حالياً
             document.querySelectorAll('.color-option').forEach(opt => opt.classList.remove('selected'));
             const colorId = `color${Settings.playerColor.charAt(0).toUpperCase() + Settings.playerColor.slice(1)}`;
             const el = document.getElementById(colorId);
@@ -835,7 +817,6 @@
 
         function selectColor(color) {
             Settings.playerColor = color;
-            // اختيار لون مختلف للخصم (عكس اللون)
             const colors = Object.keys(colorMap);
             const currentIndex = colors.indexOf(color);
             Settings.aiColor = colors[(currentIndex + 3) % colors.length];
@@ -844,13 +825,11 @@
             document.getElementById(`color${color.charAt(0).toUpperCase() + color.slice(1)}`).classList.add('selected');
         }
 
-        // دالة تغيير الصعوبة - تم تعديلها لاستقبال الحدث ومستوى الصعوبة
         function setDifficulty(event, level) {
             Settings.difficulty = level;
             document.querySelectorAll('.diff-btn').forEach(btn => btn.classList.remove('selected'));
             event.target.classList.add('selected');
             
-            // تحديث معاملات AI حسب الصعوبة
             if (level === 'easy') {
                 PHYSICS.AI_SPEED_MULTIPLIER = 0.7;
                 PHYSICS.AI_DAMAGE_MULTIPLIER = 0.8;
@@ -863,31 +842,28 @@
             }
         }
 
-        // متغير لتخزين timeout شاشة READY/Fight
+        // Ready/Fight timeouts
         let readyTimeout = null;
 
-        // ========== بدء لعبة جديدة ==========
         function startNewGame() {
             document.getElementById('mainMenu').style.display = 'none';
             document.getElementById('gameScreen').style.display = 'block';
             
-            // إلغاء أي timeout سابق
+            // تأكد من أن حجم canvas صحيح بعد إظهار الشاشة
+            resizeCanvas();
+            
             if (readyTimeout) clearTimeout(readyTimeout);
             
-            // إظهار شاشة READY FIGHT
             const readyScreen = document.getElementById('readyScreen');
             const readyText = document.getElementById('readyText');
             
             readyScreen.classList.add('show');
             readyText.textContent = 'READY?';
-            
-            // تشغيل صوت fight (مرة واحدة فقط عند READY?)
             SoundManager.play('fight');
             
             readyTimeout = setTimeout(() => {
                 readyText.textContent = 'FIGHT!';
-                // لا نريد تشغيل صوت إضافي هنا؟ يمكن إضافته إذا أردت
-                // SoundManager.play('fight');
+                SoundManager.play('fight');
                 
                 readyTimeout = setTimeout(() => {
                     readyScreen.classList.remove('show');
@@ -903,6 +879,8 @@
             Game.player2.health = 100;
             Game.player1.x = canvas.width * 0.2;
             Game.player2.x = canvas.width * 0.8;
+            Game.player1.y = getGroundY();
+            Game.player2.y = getGroundY();
             Game.player1.combo = 0;
             Game.player1.stunTimer = 0;
             Game.player2.stunTimer = 0;
@@ -918,33 +896,31 @@
             document.getElementById('gameMessage').textContent = '⚡ قاتل!';
         }
 
-        // ========== الفيزياء وحالة اللعبة ==========
+        // ========== الفيزياء (مع دعم delta time) ==========
         const PHYSICS = {
-            GRAVITY: 0.5,
-            FRICTION: 0.9,
-            // GROUND_Y أصبحت دالة تُحسب عند الحاجة
-            MOVE_SPEED: 3.5,
-            JUMP_FORCE: -10,
+            GRAVITY: 0.5 * 16,   // لكل 16ms (60fps)
+            FRICTION: 0.92,
+            MOVE_SPEED: 0.22 * 16,
+            JUMP_FORCE: -0.7 * 16,
             ATTACK_RANGE: 55,
             ATTACK_DURATION: 12,
             STUN_DURATION: 15,
-            KNOCKBACK: 12,
+            KNOCKBACK: 0.8 * 16,
             COMBO_WINDOW: 40,
             POWER_MAX: 100,
-            POWER_CHARGE_RATE: 2,
+            POWER_CHARGE_RATE: 0.15 * 16,
             DAMAGE_BASE: 12,
             AI_AGGRESSION: 0.04,
             BLOCK_REDUCTION: 0.4,
             BLOCK_STAMINA: 50,
-            BLOCK_RECHARGE: 1,
+            BLOCK_RECHARGE: 0.06 * 16,
             AI_SPEED_MULTIPLIER: 1.0,
             AI_DAMAGE_MULTIPLIER: 1.0
         };
 
         const Game = {
             player1: {
-                x: canvas.width * 0.2, 
-                y: getGroundY(), // استخدام الدالة
+                x: canvas.width * 0.2, y: getGroundY(),
                 vx: 0, vy: 0,
                 health: 100,
                 facing: 1,
@@ -962,8 +938,7 @@
             },
             
             player2: {
-                x: canvas.width * 0.8, 
-                y: getGroundY(),
+                x: canvas.width * 0.8, y: getGroundY(),
                 vx: 0, vy: 0,
                 health: 100,
                 facing: -1,
@@ -1032,7 +1007,7 @@
             }
         }
 
-        // ========== دالة الضرب ==========
+        // ========== دالة الضرب (مع تحسين الجسيمات) ==========
         function applyHit(attacker, defender, damage, knockback) {
             if (defender.invincible || defender.stunTimer > 0 || !Game.gameActive) return false;
             
@@ -1051,7 +1026,6 @@
                 if (defender.blockStamina <= 0) defender.isBlocking = false;
                 
                 SoundManager.play('block');
-                
                 Game.effects.push({ x: defender.x, y: defender.y - 40, text: "🛡️", timer: 15, type: 'block' });
             } else {
                 defender.stunTimer = PHYSICS.STUN_DURATION;
@@ -1060,9 +1034,9 @@
             
             defender.health = Math.max(0, defender.health - finalDamage);
             
-            const actualKnockback = wasBlocked ? knockback * 0.3 : knockback;
+            // Knockback يعتمد على delta time (تم تضمينه بالفعل)
             const direction = attacker.facing;
-            defender.vx = direction * actualKnockback;
+            defender.vx += direction * knockback;
             defender.vy = wasBlocked ? -2 : -4;
             
             defender.invincible = true;
@@ -1072,12 +1046,20 @@
                 Game.effects.push({ x: defender.x, y: defender.y - 40, text: `-${Math.floor(finalDamage)}`, timer: 20, type: 'damage' });
             }
             
+            // تقليل عدد الجسيمات للأجهزة الضعيفة - نتحقق من طول التأثيرات
+            const particleCount = Game.effects.length > 100 ? 2 : (wasBlocked ? 4 : 6);
             const particleColor = wasBlocked ? '#3498db' : '#e74c3c';
-            for (let i = 0; i < (wasBlocked ? 4 : 8); i++) {
-                Game.effects.push({ x: defender.x, y: defender.y - 30, vx: (Math.random() - 0.5) * 5, vy: Math.random() * -4, timer: 12, type: 'particle', color: particleColor });
+            for (let i = 0; i < particleCount; i++) {
+                Game.effects.push({ 
+                    x: defender.x, y: defender.y - 30, 
+                    vx: (Math.random() - 0.5) * 5, 
+                    vy: Math.random() * -4, 
+                    timer: 12, 
+                    type: 'particle', 
+                    color: particleColor 
+                });
             }
             
-            // تسجيل الإحصائيات عند الموت
             if (defender.health <= 0 && Game.gameActive) {
                 Game.gameActive = false;
                 clearInterval(Settings.timerInterval);
@@ -1095,24 +1077,28 @@
             return true;
         }
 
-        // ========== تحديث AI (كامل) ==========
-        function updateAI() {
+        // ========== تحديث AI (مختصر لكن كامل) ==========
+        function updateAI(dt) {
             const p2 = Game.player2;
             const p1 = Game.player1;
             
             if (!Game.gameActive) return;
             
+            // شحن طاقة التصدي
             if (p2.blockStamina < PHYSICS.BLOCK_STAMINA && !p2.isBlocking) {
-                p2.blockStamina = Math.min(PHYSICS.BLOCK_STAMINA, p2.blockStamina + PHYSICS.BLOCK_RECHARGE);
+                p2.blockStamina = Math.min(PHYSICS.BLOCK_STAMINA, p2.blockStamina + PHYSICS.BLOCK_RECHARGE * dt);
             }
             
             if (p2.invincibleTimer > 0) {
-                p2.invincibleTimer--;
-                p2.invincible = p2.invincibleTimer > 0;
+                p2.invincibleTimer -= dt;
+                if (p2.invincibleTimer <= 0) {
+                    p2.invincible = false;
+                    p2.invincibleTimer = 0;
+                }
             }
             
             if (p2.stunTimer > 0) {
-                p2.stunTimer--;
+                p2.stunTimer -= dt;
                 return;
             }
             
@@ -1120,7 +1106,7 @@
             const distance = Math.abs(dx);
             
             if (p2.decisionTimer <= 0) {
-                p2.decisionTimer = 10 + Math.floor(Math.random() * 20);
+                p2.decisionTimer = 10 + Math.random() * 20;
                 
                 if (p2.health < 30) {
                     p2.behavior = 'desperate';
@@ -1136,7 +1122,7 @@
                     p2.behavior = 'circle';
                 }
             } else {
-                p2.decisionTimer--;
+                p2.decisionTimer -= dt;
             }
             
             p2.isBlocking = false;
@@ -1145,37 +1131,36 @@
             switch(p2.behavior) {
                 case 'approach':
                 case 'finish':
-                    p2.vx = (dx > 0 ? 1 : -1) * PHYSICS.MOVE_SPEED * 1.3 * speedMult;
+                    p2.vx += (dx > 0 ? 1 : -1) * PHYSICS.MOVE_SPEED * 1.3 * speedMult * dt;
                     break;
                 case 'desperate':
-                    p2.vx = (dx > 0 ? 1 : -1) * PHYSICS.MOVE_SPEED * 1.5 * speedMult;
+                    p2.vx += (dx > 0 ? 1 : -1) * PHYSICS.MOVE_SPEED * 1.5 * speedMult * dt;
                     break;
                 case 'block':
-                    p2.vx = 0;
-                    if (p2.blockStamina > 0) {
-                        p2.isBlocking = true;
-                    }
+                    if (p2.blockStamina > 0) p2.isBlocking = true;
                     break;
                 case 'retreat':
-                    p2.vx = (dx > 0 ? -1 : 1) * PHYSICS.MOVE_SPEED * 0.7 * speedMult;
+                    p2.vx += (dx > 0 ? -1 : 1) * PHYSICS.MOVE_SPEED * 0.7 * speedMult * dt;
                     break;
                 case 'circle':
-                    p2.vx = (Math.random() - 0.5) * PHYSICS.MOVE_SPEED * 2 * speedMult;
+                    p2.vx += (Math.random() - 0.5) * PHYSICS.MOVE_SPEED * 2 * speedMult * dt;
                     break;
             }
             
             p2.facing = dx > 0 ? 1 : -1;
             
+            // القفز الذكي
             if (p2.jumpTimer <= 0 && p2.isGrounded) {
                 if ((p1.vy < -5 && distance < 100) || Math.random() < 0.02) {
-                    p2.vy = PHYSICS.JUMP_FORCE * 0.9;
+                    p2.vy = PHYSICS.JUMP_FORCE;
                     p2.jumpTimer = 40;
                     SoundManager.play('jump');
                 }
             } else {
-                p2.jumpTimer--;
+                p2.jumpTimer -= dt;
             }
             
+            // الهجوم
             if (p2.attackCooldown <= 0 && distance < PHYSICS.ATTACK_RANGE * 1.8 && !p2.isBlocking) {
                 let shouldAttack = false;
                 
@@ -1200,29 +1185,13 @@
                 }
             }
             
-            if (p2.attackCooldown > 0) p2.attackCooldown--;
-            if (p2.attackTimer > 0) p2.attackTimer--;
+            if (p2.attackCooldown > 0) p2.attackCooldown -= dt;
+            if (p2.attackTimer > 0) p2.attackTimer -= dt;
             else p2.isAttacking = false;
-            
-            p2.x += p2.vx;
-            p2.y += p2.vy;
-            p2.vy += PHYSICS.GRAVITY;
-            p2.vx *= PHYSICS.FRICTION;
-            
-            const groundY = getGroundY();
-            if (p2.y >= groundY) {
-                p2.y = groundY;
-                p2.vy = 0;
-                p2.isGrounded = true;
-            } else {
-                p2.isGrounded = false;
-            }
-            
-            p2.x = Math.max(50, Math.min(canvas.width - 50, p2.x));
         }
 
-        // ========== تحديث اللعبة الرئيسي ==========
-        function updateGame() {
+        // ========== تحديث اللعبة الرئيسي (مع delta time) ==========
+        function updateGame(dt) {
             if (!Game.gameActive) return;
             
             const p1 = Game.player1;
@@ -1230,23 +1199,29 @@
             
             Game.frame++;
             
+            // شحن طاقة التصدي
             if (p1.blockStamina < PHYSICS.BLOCK_STAMINA && !p1.isBlocking) {
-                p1.blockStamina = Math.min(PHYSICS.BLOCK_STAMINA, p1.blockStamina + PHYSICS.BLOCK_RECHARGE);
+                p1.blockStamina = Math.min(PHYSICS.BLOCK_STAMINA, p1.blockStamina + PHYSICS.BLOCK_RECHARGE * dt);
             }
             
+            // مؤقتات المناعة
             if (p1.invincibleTimer > 0) {
-                p1.invincibleTimer--;
-                p1.invincible = p1.invincibleTimer > 0;
+                p1.invincibleTimer -= dt;
+                if (p1.invincibleTimer <= 0) {
+                    p1.invincible = false;
+                    p1.invincibleTimer = 0;
+                }
             }
             
+            // حركة اللاعب
             if (p1.stunTimer <= 0) {
                 p1.vx = 0;
                 if (Game.leftPressed && !p1.isBlocking) {
-                    p1.vx = -PHYSICS.MOVE_SPEED;
+                    p1.vx = -PHYSICS.MOVE_SPEED * dt;
                     p1.facing = -1;
                 }
                 if (Game.rightPressed && !p1.isBlocking) {
-                    p1.vx = PHYSICS.MOVE_SPEED;
+                    p1.vx = PHYSICS.MOVE_SPEED * dt;
                     p1.facing = 1;
                 }
                 
@@ -1257,13 +1232,14 @@
                 
                 p1.isBlocking = Game.blockPressed && p1.blockStamina > 0;
             } else {
-                p1.stunTimer--;
+                p1.stunTimer -= dt;
             }
             
+            // فيزياء اللاعب
             p1.x += p1.vx;
             p1.y += p1.vy;
-            p1.vy += PHYSICS.GRAVITY;
-            p1.vx *= PHYSICS.FRICTION;
+            p1.vy += PHYSICS.GRAVITY * dt;
+            p1.vx *= Math.pow(PHYSICS.FRICTION, dt);
             
             const groundY = getGroundY();
             if (p1.y >= groundY) {
@@ -1276,6 +1252,7 @@
             
             p1.x = Math.max(50, Math.min(canvas.width - 50, p1.x));
             
+            // منع الاختراق
             if (p1.x > p2.x - 40) {
                 p1.x = p2.x - 40;
             }
@@ -1283,15 +1260,16 @@
                 p2.x = p1.x + 40;
             }
             
+            // هجوم اللاعب
             if (p1.isAttacking) {
-                p1.attackTimer--;
+                p1.attackTimer -= dt;
                 
-                if (p1.attackTimer === PHYSICS.ATTACK_DURATION - 5) {
+                if (p1.attackTimer <= PHYSICS.ATTACK_DURATION - 5 && p1.attackTimer > PHYSICS.ATTACK_DURATION - 6) {
                     const distance = Math.abs(p1.x - p2.x);
                     if (distance < PHYSICS.ATTACK_RANGE) {
                         const damage = PHYSICS.DAMAGE_BASE + (Game.powerCharge * 0.25);
                         
-                        if (applyHit(p1, p2, damage, PHYSICS.KNOCKBACK * 1.5)) {
+                        if (applyHit(p1, p2, damage, PHYSICS.KNOCKBACK)) {
                             if (Game.frame - p1.lastHitTime < PHYSICS.COMBO_WINDOW) {
                                 p1.combo++;
                             } else {
@@ -1311,23 +1289,27 @@
                 }
             }
             
-            updateAI();
+            // تحديث AI
+            updateAI(dt);
             
+            // شحن القوة
             if (Game.mouseDown) {
-                Game.powerCharge = Math.min(PHYSICS.POWER_MAX, Game.powerCharge + PHYSICS.POWER_CHARGE_RATE);
+                Game.powerCharge = Math.min(PHYSICS.POWER_MAX, Game.powerCharge + PHYSICS.POWER_CHARGE_RATE * dt);
             } else {
-                Game.powerCharge = Math.max(0, Game.powerCharge - 1);
+                Game.powerCharge = Math.max(0, Game.powerCharge - 0.5 * dt);
             }
             
+            // تحديث التأثيرات
             Game.effects = Game.effects.filter(e => {
                 if (e.type === 'particle') {
-                    e.x += e.vx || 0;
-                    e.y += e.vy || 0;
+                    e.x += (e.vx || 0) * dt;
+                    e.y += (e.vy || 0) * dt;
                 }
-                e.timer--;
+                e.timer -= dt;
                 return e.timer > 0;
             });
             
+            // تحديث واجهة المستخدم
             document.getElementById('player1Health').style.width = p1.health + '%';
             document.getElementById('player2Health').style.width = p2.health + '%';
             document.getElementById('powerMeter').style.width = Game.powerCharge + '%';
@@ -1343,7 +1325,7 @@
             }
         }
 
-        // ========== دوال الرسم ==========
+        // ========== دوال الرسم (بدون تغيير كبير) ==========
         function drawStickFigure(x, y, isPlayer, state) {
             const color = isPlayer ? colorMap[Settings.playerColor] : colorMap[Settings.aiColor];
             const headSize = 12;
@@ -1457,13 +1439,25 @@
             drawEffects();
         }
 
-        function gameLoop() {
-            updateGame();
+        // حلقة اللعبة مع delta time
+        let lastTimestamp = 0;
+        function gameLoop(timestamp) {
+            if (!lastTimestamp) {
+                lastTimestamp = timestamp;
+                requestAnimationFrame(gameLoop);
+                return;
+            }
+            
+            const dt = Math.min(32, timestamp - lastTimestamp); // حد أقصى 32ms
+            lastTimestamp = timestamp;
+            
+            updateGame(dt);
             drawGame();
+            
             requestAnimationFrame(gameLoop);
         }
 
-        // ========== أحداث التحكم ==========
+        // ========== أحداث التحكم (بدون تغيير) ==========
         function setupControls() {
             const leftBtn = document.getElementById('joystickLeft');
             const rightBtn = document.getElementById('joystickRight');
@@ -1528,7 +1522,7 @@
             showMainMenu();
         });
 
-        // ========== تفعيل الصوت ==========
+        // ========== تفعيل الصوت (مطلوب للمتصفحات) ==========
         function enableAudio() {
             SoundManager.enabled = true;
             document.removeEventListener('click', enableAudio);
@@ -1540,7 +1534,7 @@
         // ========== بدء اللعبة ==========
         showMainMenu();
         setupControls();
-        gameLoop();
+        requestAnimationFrame(gameLoop);
     </script>
 </body>
-                </html>
+</html>
